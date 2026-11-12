@@ -150,3 +150,32 @@ get_buffer_contents(resource_id="ResourceId::123", offset=256, length=512)
 ## ライセンス
 
 MIT
+
+## 多窗口与并发客户端（IPC v2）
+
+每个 RenderDoc 窗口使用独立的实例 ID 和目录：
+`%TEMP%/renderdoc_mcp/instances/<instance_id>/`。每次调用使用独立请求和响应文件，
+写完后原子发布，并校验响应 ID；多个窗口及多个 MCP 客户端可同时工作。
+
+```python
+list_renderdoc_instances()
+# 返回每个窗口的 instance_id、pid、loaded、filename。
+get_capture_status(instance_id="<Mobile 窗口的 instance_id>")
+get_frame_summary(instance_id="<PC 窗口的 instance_id>")
+```
+
+所有原有工具均新增可选的 `instance_id` 参数。只存在一个活动窗口时可省略；多个窗口时
+必须指定，防止静默读取错误的截帧。无需改变共享的“当前窗口”，不同聊天可各自指定目标。
+也可在某个 MCP 服务进程中设置 `RENDERDOC_MCP_INSTANCE_ID` 作为默认目标。
+窗口重启或扩展重载后实例 ID 会改变，应重新枚举。实例每两秒更新心跳和截帧文件名；
+超过 120 秒未更新的实例不参与发现。
+
+升级时同时更新 MCP 服务与 RenderDoc 扩展，并在每个已打开的 RenderDoc 窗口重载扩展，
+然后重新连接 MCP 客户端以刷新工具参数。v2 不会回退到旧的共享通信文件。
+如设置 `RENDERDOC_MCP_IPC_DIR` 覆盖通信根目录，两端必须使用相同路径。
+
+通信回归测试（无需 RenderDoc、Qt 或 GPU）：
+
+```powershell
+python -m unittest discover -s tests -v
+```

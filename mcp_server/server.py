@@ -13,6 +13,11 @@ from .config import settings
 # Initialize FastMCP server
 mcp = FastMCP(
     name="RenderDoc MCP Server",
+    instructions=(
+        "Call list_renderdoc_instances to discover windows and capture filenames. "
+        "When multiple windows are open, pass the chosen instance_id to every tool. "
+        "Instance IDs change when an extension is reloaded."
+    ),
 )
 
 # RenderDoc bridge client
@@ -20,12 +25,22 @@ bridge = RenderDocBridge(host=settings.renderdoc_host, port=settings.renderdoc_p
 
 
 @mcp.tool
-def get_capture_status() -> dict:
+def list_renderdoc_instances() -> dict:
+    """List active RenderDoc windows with instance_id, PID and capture filename.
+
+    Pass instance_id to other tools to target a particular window. Multiple windows
+    require an explicit ID; with one window it may be omitted.
+    """
+    return bridge.list_instances()
+
+
+@mcp.tool
+def get_capture_status(instance_id: str | None = None) -> dict:
     """
     Check if a capture is currently loaded in RenderDoc.
     Returns the capture status and API type if loaded.
     """
-    return bridge.call("get_capture_status")
+    return bridge.call("get_capture_status", instance_id=instance_id)
 
 
 @mcp.tool
@@ -37,6 +52,7 @@ def get_draw_calls(
     event_id_max: int | None = None,
     only_actions: bool = False,
     flags_filter: list[str] | None = None,
+    instance_id: str | None = None,
 ) -> dict:
     """
     Get the list of all draw calls and actions in the current capture.
@@ -66,11 +82,11 @@ def get_draw_calls(
         params["only_actions"] = only_actions
     if flags_filter is not None:
         params["flags_filter"] = flags_filter
-    return bridge.call("get_draw_calls", params)
+    return bridge.call("get_draw_calls", params, instance_id=instance_id)
 
 
 @mcp.tool
-def get_frame_summary() -> dict:
+def get_frame_summary(instance_id: str | None = None) -> dict:
     """
     Get a summary of the current capture frame.
 
@@ -81,13 +97,14 @@ def get_frame_summary() -> dict:
     - Top-level markers with event IDs and child counts
     - Resource counts: textures, buffers
     """
-    return bridge.call("get_frame_summary")
+    return bridge.call("get_frame_summary", instance_id=instance_id)
 
 
 @mcp.tool
 def find_draws_by_shader(
     shader_name: str,
     stage: Literal["vertex", "hull", "domain", "geometry", "pixel", "compute"] | None = None,
+    instance_id: str | None = None,
 ) -> dict:
     """
     Find all draw calls using a shader with the given name (partial match).
@@ -101,11 +118,11 @@ def find_draws_by_shader(
     params: dict[str, object] = {"shader_name": shader_name}
     if stage is not None:
         params["stage"] = stage
-    return bridge.call("find_draws_by_shader", params)
+    return bridge.call("find_draws_by_shader", params, instance_id=instance_id)
 
 
 @mcp.tool
-def find_draws_by_texture(texture_name: str) -> dict:
+def find_draws_by_texture(texture_name: str, instance_id: str | None = None) -> dict:
     """
     Find all draw calls using a texture with the given name (partial match).
 
@@ -115,11 +132,11 @@ def find_draws_by_texture(texture_name: str) -> dict:
     Returns a list of matching draw calls with event IDs and match reasons.
     Searches SRVs, UAVs, and render targets.
     """
-    return bridge.call("find_draws_by_texture", {"texture_name": texture_name})
+    return bridge.call("find_draws_by_texture", {"texture_name": texture_name}, instance_id=instance_id)
 
 
 @mcp.tool
-def find_draws_by_resource(resource_id: str) -> dict:
+def find_draws_by_resource(resource_id: str, instance_id: str | None = None) -> dict:
     """
     Find all draw calls using a specific resource ID (exact match).
 
@@ -129,11 +146,11 @@ def find_draws_by_resource(resource_id: str) -> dict:
     Returns a list of matching draw calls with event IDs and match reasons.
     Searches shaders, SRVs, UAVs, render targets, and depth targets.
     """
-    return bridge.call("find_draws_by_resource", {"resource_id": resource_id})
+    return bridge.call("find_draws_by_resource", {"resource_id": resource_id}, instance_id=instance_id)
 
 
 @mcp.tool
-def get_draw_call_details(event_id: int) -> dict:
+def get_draw_call_details(event_id: int, instance_id: str | None = None) -> dict:
     """
     Get detailed information about a specific draw call.
 
@@ -142,7 +159,7 @@ def get_draw_call_details(event_id: int) -> dict:
 
     Includes vertex/index counts, resource outputs, and other metadata.
     """
-    return bridge.call("get_draw_call_details", {"event_id": event_id})
+    return bridge.call("get_draw_call_details", {"event_id": event_id}, instance_id=instance_id)
 
 
 @mcp.tool
@@ -150,6 +167,7 @@ def get_action_timings(
     event_ids: list[int] | None = None,
     marker_filter: str | None = None,
     exclude_markers: list[str] | None = None,
+    instance_id: str | None = None,
 ) -> dict:
     """
     Get GPU timing information for actions (draw calls, dispatches, etc.).
@@ -176,13 +194,14 @@ def get_action_timings(
         params["marker_filter"] = marker_filter
     if exclude_markers is not None:
         params["exclude_markers"] = exclude_markers
-    return bridge.call("get_action_timings", params)
+    return bridge.call("get_action_timings", params, instance_id=instance_id)
 
 
 @mcp.tool
 def get_shader_info(
     event_id: int,
     stage: Literal["vertex", "hull", "domain", "geometry", "pixel", "compute"],
+    instance_id: str | None = None,
 ) -> dict:
     """
     Get shader information for a specific stage at a given event.
@@ -193,7 +212,7 @@ def get_shader_info(
 
     Returns shader disassembly, constant buffer values, and resource bindings.
     """
-    return bridge.call("get_shader_info", {"event_id": event_id, "stage": stage})
+    return bridge.call("get_shader_info", {"event_id": event_id, "stage": stage}, instance_id=instance_id)
 
 
 @mcp.tool
@@ -201,6 +220,7 @@ def get_buffer_contents(
     resource_id: str,
     offset: int = 0,
     length: int = 0,
+    instance_id: str | None = None,
 ) -> dict:
     """
     Read the contents of a buffer resource.
@@ -215,11 +235,12 @@ def get_buffer_contents(
     return bridge.call(
         "get_buffer_contents",
         {"resource_id": resource_id, "offset": offset, "length": length},
+        instance_id=instance_id,
     )
 
 
 @mcp.tool
-def get_texture_info(resource_id: str) -> dict:
+def get_texture_info(resource_id: str, instance_id: str | None = None) -> dict:
     """
     Get metadata about a texture resource.
 
@@ -228,7 +249,7 @@ def get_texture_info(resource_id: str) -> dict:
 
     Includes dimensions, format, mip levels, and other properties.
     """
-    return bridge.call("get_texture_info", {"resource_id": resource_id})
+    return bridge.call("get_texture_info", {"resource_id": resource_id}, instance_id=instance_id)
 
 
 @mcp.tool
@@ -238,6 +259,7 @@ def get_texture_data(
     slice: int = 0,
     sample: int = 0,
     depth_slice: int | None = None,
+    instance_id: str | None = None,
 ) -> dict:
     """
     Read the pixel data of a texture resource.
@@ -257,11 +279,11 @@ def get_texture_data(
     params = {"resource_id": resource_id, "mip": mip, "slice": slice, "sample": sample}
     if depth_slice is not None:
         params["depth_slice"] = depth_slice
-    return bridge.call("get_texture_data", params)
+    return bridge.call("get_texture_data", params, instance_id=instance_id)
 
 
 @mcp.tool
-def get_pipeline_state(event_id: int) -> dict:
+def get_pipeline_state(event_id: int, instance_id: str | None = None) -> dict:
     """
     Get the full graphics pipeline state at a specific event.
 
@@ -277,11 +299,11 @@ def get_pipeline_state(event_id: int) -> dict:
     - Render targets and depth target
     - Viewports and input assembly state
     """
-    return bridge.call("get_pipeline_state", {"event_id": event_id})
+    return bridge.call("get_pipeline_state", {"event_id": event_id}, instance_id=instance_id)
 
 
 @mcp.tool
-def list_captures(directory: str) -> dict:
+def list_captures(directory: str, instance_id: str | None = None) -> dict:
     """
     List all RenderDoc capture files (.rdc) in the specified directory.
 
@@ -294,11 +316,11 @@ def list_captures(directory: str) -> dict:
     - size_bytes: File size in bytes
     - modified_time: Last modified timestamp (ISO format)
     """
-    return bridge.call("list_captures", {"directory": directory})
+    return bridge.call("list_captures", {"directory": directory}, instance_id=instance_id)
 
 
 @mcp.tool
-def open_capture(capture_path: str) -> dict:
+def open_capture(capture_path: str, instance_id: str | None = None) -> dict:
     """
     Open a RenderDoc capture file (.rdc).
 
@@ -308,7 +330,7 @@ def open_capture(capture_path: str) -> dict:
     Returns success status and information about the opened capture.
     Note: This will close any currently open capture.
     """
-    return bridge.call("open_capture", {"capture_path": capture_path})
+    return bridge.call("open_capture", {"capture_path": capture_path}, instance_id=instance_id)
 
 
 def main():

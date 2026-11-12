@@ -116,10 +116,12 @@ get_action_timings(marker_filter="Camera.Render", exclude_markers=["GUI.Repaint"
 ## 通信プロトコル
 
 ファイルベースIPC:
-- IPCディレクトリ: `%TEMP%/renderdoc_mcp/`
-- `request.json`: リクエスト（MCPサーバー → RenderDoc）
-- `response.json`: レスポンス（RenderDoc → MCPサーバー）
-- `lock`: 書き込み中ロックファイル
+- IPC v2: `%TEMP%/renderdoc_mcp/instances/<pid>-<uuid>/`
+- `instance.json`: 原子的に更新されるインスタンス情報・心拍・キャプチャファイル名
+- `requests/<request_id>.json`: リクエスト（完成後に原子的に公開）
+- `responses/<request_id>.json`: レスポンス（完成後に原子的に公開、ID検証あり）
+- `list_renderdoc_instances` で列挙し、各ツールの `instance_id` で対象を指定
+- 複数ウィンドウ時は対象指定必須。共有の現在ウィンドウや旧IPCへのフォールバックなし
 - ポーリング間隔: 100ms（RenderDoc側）
 
 ## 開発ノート
