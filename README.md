@@ -1,54 +1,54 @@
-# RenderDoc MCP Server
+# RenderDoc MCP 服务器
 
-RenderDoc UI拡張機能として動作するMCPサーバー。AIアシスタントがRenderDocのキャプチャデータにアクセスし、グラフィックスデバッグを支援する。
+通过 RenderDoc 界面扩展提供的 MCP 服务器，让 AI 助手能够访问 RenderDoc 截帧数据，辅助图形调试。
 
-## アーキテクチャ
+## 架构
 
 ```
-Claude/AI Client (stdio)
+Claude / AI 客户端（stdio）
         │
         ▼
-MCP Server Process (Python + FastMCP 2.0)
-        │ File-based IPC (%TEMP%/renderdoc_mcp/)
+MCP 服务器进程（Python + FastMCP 2.0）
+        │ 文件 IPC（%TEMP%/renderdoc_mcp/）
         ▼
-RenderDoc Process (Extension)
+RenderDoc 进程（扩展）
 ```
 
-RenderDoc内蔵のPythonにはsocketモジュールがないため、ファイルベースのIPCで通信を行う。
+由于 RenderDoc 内置的 Python 不提供 socket 模块，因此使用文件 IPC 进行进程间通信。
 
-## セットアップ
+## 安装与配置
 
-### 1. RenderDoc拡張機能のインストール
+### 1. 安装 RenderDoc 扩展
 
-```bash
+```powershell
 python scripts/install_extension.py
 ```
 
-拡張機能は `%APPDATA%\qrenderdoc\extensions\renderdoc_mcp_bridge` にインストールされる。
+扩展将安装到 `%APPDATA%\qrenderdoc\extensions\renderdoc_mcp_bridge`。
 
-### 2. RenderDocで拡張機能を有効化
+### 2. 在 RenderDoc 中启用扩展
 
-1. RenderDocを起動
-2. Tools > Manage Extensions
-3. "RenderDoc MCP Bridge" を有効化
+1. 启动 RenderDoc。
+2. 打开 Tools > Manage Extensions。
+3. 启用 "RenderDoc MCP Bridge"。
 
-### 3. MCPサーバーのインストール
+### 3. 安装 MCP 服务器
 
-```bash
-uv tool install
-uv tool update-shell  # PATHに追加
+```powershell
+uv tool install .
+uv tool update-shell  # 添加到 PATH
 ```
 
-シェルを再起動すると `renderdoc-mcp` コマンドが使えるようになる。
+重新打开终端后，即可使用 `renderdoc-mcp` 命令。
 
-> **Note**: `--editable` を付けると、ソースコードの変更が即座に反映される（開発時に便利）。
-> 安定版としてインストールする場合は `uv tool install .` を使用。
+> **提示**：开发时可使用 `uv tool install --editable .`，让源码修改直接生效。
+> 常规安装使用 `uv tool install .`。
 
-### 4. MCPクライアントの設定
+### 4. 配置 MCP 客户端
 
 #### Claude Desktop
 
-`claude_desktop_config.json` に追加:
+在 `claude_desktop_config.json` 中添加：
 
 ```json
 {
@@ -62,7 +62,7 @@ uv tool update-shell  # PATHに追加
 
 #### Claude Code
 
-`.mcp.json` に追加:
+在 `.mcp.json` 中添加：
 
 ```json
 {
@@ -74,108 +74,79 @@ uv tool update-shell  # PATHに追加
 }
 ```
 
-## 使い方
+## 使用方法
 
-1. RenderDocを起動し、キャプチャファイル (.rdc) を開く
-2. MCPクライアント (Claude等) から RenderDoc のデータにアクセス
+1. 启动 RenderDoc 并打开截帧文件（.rdc）。
+2. 通过 MCP 客户端（如 Claude）访问 RenderDoc 数据。
 
-## MCPツール一覧
+## MCP 工具列表
 
-| ツール | 説明 |
+| 工具 | 说明 |
 |--------|------|
-| `get_capture_status` | キャプチャの読み込み状態を確認 |
-| `get_draw_calls` | ドローコール一覧を階層構造で取得 |
-| `get_draw_call_details` | 特定のドローコールの詳細情報を取得 |
-| `get_shader_info` | シェーダーのソースコード・定数バッファの値を取得 |
-| `get_buffer_contents` | バッファの内容を取得 (Base64) |
-| `get_texture_info` | テクスチャのメタデータを取得 |
-| `get_texture_data` | テクスチャのピクセルデータを取得 (Base64) |
-| `get_pipeline_state` | パイプライン状態を取得 |
+| `get_capture_status` | 检查截帧加载状态 |
+| `get_draw_calls` | 获取具有层级结构的绘制调用列表 |
+| `get_draw_call_details` | 获取指定绘制调用的详细信息 |
+| `get_shader_info` | 获取着色器源码和常量缓冲区的值 |
+| `get_buffer_contents` | 获取缓冲区内容（Base64） |
+| `get_texture_info` | 获取纹理元数据 |
+| `get_texture_data` | 获取纹理像素数据（Base64） |
+| `get_pipeline_state` | 获取管线状态 |
 
-## 使用例
+## 使用示例
 
-### ドローコール一覧の取得
+### 获取绘制调用列表
 
 ```
 get_draw_calls(include_children=true)
 ```
 
-### シェーダー情報の取得
+### 获取着色器信息
 
 ```
 get_shader_info(event_id=123, stage="pixel")
 ```
 
-### パイプライン状態の取得
+### 获取管线状态
 
 ```
 get_pipeline_state(event_id=123)
 ```
 
-### テクスチャデータの取得
+### 获取纹理数据
 
 ```
-# 2Dテクスチャのmip 0を取得
+# 获取 2D 纹理的 mip 0
 get_texture_data(resource_id="ResourceId::123")
 
-# 特定のmipレベルを取得
+# 获取指定 mip 级别
 get_texture_data(resource_id="ResourceId::123", mip=2)
 
-# キューブマップの特定の面を取得 (0=X+, 1=X-, 2=Y+, 3=Y-, 4=Z+, 5=Z-)
+# 获取立方体贴图的指定面（0=X+、1=X-、2=Y+、3=Y-、4=Z+、5=Z-）
 get_texture_data(resource_id="ResourceId::456", slice=3)
 
-# 3Dテクスチャの特定の深度スライスを取得
+# 获取 3D 纹理的指定深度切片
 get_texture_data(resource_id="ResourceId::789", depth_slice=5)
 ```
 
-### バッファデータの部分取得
+### 读取部分缓冲区数据
 
 ```
-# バッファ全体を取得
+# 读取整个缓冲区
 get_buffer_contents(resource_id="ResourceId::123")
 
-# オフセット256から512バイト取得
+# 从偏移量 256 开始读取 512 字节
 get_buffer_contents(resource_id="ResourceId::123", offset=256, length=512)
 ```
 
-## 要件
+## 环境要求
 
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/)
 - RenderDoc 1.20+
 
-> **Note**: 動作確認はWindows + DirectX 11環境でのみ行っています。
-> Linux/macOS + Vulkan/OpenGL環境でも動作する可能性がありますが、未検証です。
+> **提示**：原项目仅在 Windows + DirectX 11 环境中验证过。
+> Linux/macOS + Vulkan/OpenGL 环境可能也可运行，但尚未验证。
 
-## ライセンス
+## 许可证
 
 MIT
-
-## 多窗口与并发客户端（IPC v2）
-
-每个 RenderDoc 窗口使用独立的实例 ID 和目录：
-`%TEMP%/renderdoc_mcp/instances/<instance_id>/`。每次调用使用独立请求和响应文件，
-写完后原子发布，并校验响应 ID；多个窗口及多个 MCP 客户端可同时工作。
-
-```python
-list_renderdoc_instances()
-# 返回每个窗口的 instance_id、pid、loaded、filename。
-get_capture_status(instance_id="<Mobile 窗口的 instance_id>")
-get_frame_summary(instance_id="<PC 窗口的 instance_id>")
-```
-
-所有原有工具均新增可选的 `instance_id` 参数。只存在一个活动窗口时可省略；多个窗口时
-必须指定，防止静默读取错误的截帧。无需改变共享的“当前窗口”，不同聊天可各自指定目标。
-也可在某个 MCP 服务进程中设置 `RENDERDOC_MCP_INSTANCE_ID` 作为默认目标。
-窗口重启或扩展重载后实例 ID 会改变，应重新枚举。实例每两秒更新心跳和截帧文件名；
-超过 120 秒未更新的实例不参与发现。
-
-升级时同时更新 MCP 服务与 RenderDoc 扩展，并在每个已打开的 RenderDoc 窗口重载扩展，
-然后重新连接 MCP 客户端以刷新工具参数。v2 不会回退到旧的共享通信文件。
-如设置 `RENDERDOC_MCP_IPC_DIR` 覆盖通信根目录，两端必须使用相同路径。
-
-通信回归测试（无需 RenderDoc、Qt 或 GPU）：
-
-```powershell
-python -m unittest discover -s tests -v
-```
