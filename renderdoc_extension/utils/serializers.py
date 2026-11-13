@@ -2,6 +2,9 @@
 Serialization utility functions for RenderDoc data types.
 """
 
+import math
+import struct
+
 import renderdoc as rd
 
 
@@ -50,19 +53,35 @@ class Serializers:
                 "columns": var.columns,
             }
 
-            # Get value based on type
+            # RenderDoc renamed Int to SInt; optional types vary by release.
             try:
-                if var.type == rd.VarType.Float:
-                    count = var.rows * var.columns
-                    var_info["value"] = list(var.value.f32v[:count])
-                elif var.type == rd.VarType.Int:
-                    count = var.rows * var.columns
-                    var_info["value"] = list(var.value.s32v[:count])
-                elif var.type == rd.VarType.UInt:
-                    count = var.rows * var.columns
-                    var_info["value"] = list(var.value.u32v[:count])
-            except Exception:
-                pass
+                fields = (
+                    ("Float", "f32v"), ("Double", "f64v"), ("Half", "f16v"),
+                    ("SInt", "s32v"), ("Int", "s32v"), ("UInt", "u32v"),
+                    ("SLong", "s64v"), ("ULong", "u64v"),
+                    ("SShort", "s16v"), ("UShort", "u16v"),
+                    ("SByte", "s8v"), ("UByte", "u8v"), ("Bool", "u32v"),
+                )
+                for type_name, field in fields:
+                    if var.type != getattr(rd.VarType, type_name, None):
+                        continue
+                    values = list(getattr(var.value, field)[:var.rows * var.columns])
+                    if type_name == "Half":
+                        values = [v if isinstance(v, float) else
+                                  struct.unpack("<e", struct.pack("<H", int(v)))[0]
+                                  for v in values]
+                    elif type_name == "Bool":
+                        values = [bool(v) for v in values]
+                    # The IPC transport uses strict JSON, which forbids NaN/Inf.
+                    var_info["value"] = [
+                        ("NaN" if math.isnan(v) else
+                         "Infinity" if v > 0 else "-Infinity")
+                        if isinstance(v, float) and not math.isfinite(v) else v
+                        for v in values
+                    ]
+                    break
+            except Exception as e:
+                var_info["value_error"] = str(e)
 
             # Nested members
             if var.members:

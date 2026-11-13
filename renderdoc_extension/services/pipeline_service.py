@@ -46,7 +46,7 @@ class PipelineService:
                 targets = controller.GetDisassemblyTargets(True)
                 if targets:
                     disasm = controller.DisassembleShader(
-                        pipe.GetGraphicsPipelineObject(), reflection, targets[0]
+                        self._get_pipeline_object(pipe, stage_enum), reflection, targets[0]
                     )
                     shader_info["disassembly"] = disasm
             except Exception as e:
@@ -364,6 +364,19 @@ class PipelineService:
 
         return details
 
+    @staticmethod
+    def _get_pipeline_object(pipe, stage):
+        if stage == rd.ShaderStage.Compute:
+            return pipe.GetComputePipelineObject()
+        return pipe.GetGraphicsPipelineObject()
+
+    @staticmethod
+    def _get_cbuffer_binding(pipe, stage, index):
+        # RenderDoc 1.45 returns UsedDescriptor, older releases BoundCBuffer.
+        if hasattr(pipe, "GetConstantBlock"):
+            return pipe.GetConstantBlock(stage, index, 0).descriptor
+        return pipe.GetConstantBuffer(stage, index, 0)
+
     def _get_cbuffer_info(self, controller, pipe, reflection, stage):
         """Get constant buffer information and values"""
         cbuffers = []
@@ -377,21 +390,37 @@ class PipelineService:
             }
 
             try:
-                bind = pipe.GetConstantBuffer(stage, i, 0)
-                if bind.resourceId != rd.ResourceId.Null():
+                bind = self._get_cbuffer_binding(pipe, stage, i)
+                resource = getattr(bind, "resource", None)
+                if resource is None:
+                    resource = bind.resourceId
+                cb_info.update({
+                    "binding": getattr(cb, "fixedBindNumber", getattr(cb, "bindPoint", i)),
+                    "binding_space": getattr(cb, "fixedBindSetOrSpace", 0),
+                    "resource_id": str(resource),
+                    "byte_offset": bind.byteOffset,
+                    "byte_size": bind.byteSize,
+                })
+                if (resource != rd.ResourceId.Null()
+                        or not getattr(cb, "bufferBacked", True)
+                        or getattr(cb, "inlineDataBytes", False)):
                     variables = controller.GetCBufferVariableContents(
-                        pipe.GetGraphicsPipelineObject(),
+                        self._get_pipeline_object(pipe, stage),
                         reflection.resourceId,
                         stage,
                         reflection.entryPoint,
                         i,
-                        bind.resourceId,
+                        resource,
                         bind.byteOffset,
                         bind.byteSize,
                     )
                     cb_info["variables"] = Serializers.serialize_variables(variables)
+                    cb_info["decode_status"] = "decoded" if variables else "empty"
+                else:
+                    cb_info["decode_status"] = "unbound"
             except Exception as e:
                 cb_info["error"] = str(e)
+                cb_info["decode_status"] = "error"
 
             cbuffers.append(cb_info)
 
@@ -406,7 +435,7 @@ class PipelineService:
                 resources.append(
                     {
                         "name": res.name,
-                        "type": str(res.resType),
+                        "type": str(getattr(res, "textureType", getattr(res, "resType", ""))),
                         "binding": res.fixedBindNumber,
                         "access": "ReadOnly",
                     }
@@ -419,7 +448,7 @@ class PipelineService:
                 resources.append(
                     {
                         "name": res.name,
-                        "type": str(res.resType),
+                        "type": str(getattr(res, "textureType", getattr(res, "resType", ""))),
                         "binding": res.fixedBindNumber,
                         "access": "ReadWrite",
                     }

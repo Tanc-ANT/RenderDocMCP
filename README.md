@@ -106,6 +106,23 @@ get_draw_calls(include_children=true)
 get_shader_info(event_id=123, stage="pixel")
 ```
 
+常量缓冲返回解码后的 `variables`，以及实际绑定的 `resource_id`、
+`byte_offset`、`byte_size` 和 `decode_status`。`slot` 是着色器反射数组索引，
+`binding` / `binding_space` 是寄存器号和寄存器空间，两者不一定相同。
+兼容 RenderDoc 1.45 的 `GetConstantBlock` 接口，并保留旧版
+`GetConstantBuffer` 回退；Compute Shader 使用对应的 Compute PSO 解码。
+
+如果截帧中的着色器剥离了反射名称，变量可能显示为 `unknown` 和原始整数，
+不会推测原始变量名。可使用返回的资源 ID 和偏移，通过 `get_buffer_contents`
+读取该常量块的原始字节；`length` 使用 `size`（反射大小），并限制在非零
+`byte_size` 范围内。`byte_size` 可能是底层上传缓冲的剩余范围，远大于常量块。
+浮点 `NaN` / `Infinity` / `-Infinity` 以同名字符串返回，保持 IPC JSON 合法。
+解码失败或值读取失败分别通过 `error` / `value_error` 返回。
+
+更新扩展源码后，重新运行 `python scripts/install_extension.py`，然后在各个
+RenderDoc 窗口的 Tools > Manage Extensions 中重载扩展（或重启 RenderDoc）。
+已加载的扩展不会自动使用磁盘上的新代码。
+
 ### 获取管线状态
 
 ```
